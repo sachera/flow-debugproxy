@@ -3,20 +3,22 @@
 FROM golang:alpine AS build-env
 ENV GOPATH=/gopath
 ENV PATH=$GOPATH/bin:$PATH
-ADD . /gopath/src/github.com/dfeyer/flow-debugproxy
+WORKDIR /app
 RUN apk update && \
     apk upgrade && \
     apk add git
-RUN cd /gopath/src/github.com/dfeyer/flow-debugproxy \
-  && go get \
-  && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o flow-debugproxy
+ADD go.mod .
+ADD go.sum .
+RUN go mod download
+ADD . .
+RUN CGO_ENABLED=0 go build -o flow-debugproxy
 
 #
 # Build step
 FROM alpine
 WORKDIR /app
 
-COPY --from=build-env /gopath/src/github.com/dfeyer/flow-debugproxy/flow-debugproxy /app/
+COPY --from=build-env /app/flow-debugproxy /app/
 
 ENV ADDITIONAL_ARGS ""
 
