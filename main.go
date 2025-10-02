@@ -5,9 +5,10 @@
 package main
 
 import (
+	golog "log"
+
 	"github.com/dfeyer/flow-debugproxy/config"
 
-	"github.com/dfeyer/flow-debugproxy/errorhandler"
 	"github.com/dfeyer/flow-debugproxy/logger"
 	"github.com/dfeyer/flow-debugproxy/pathmapperfactory"
 	"github.com/dfeyer/flow-debugproxy/pathmapping"
@@ -84,13 +85,20 @@ func main() {
 			Config: c,
 		}
 
-		laddr, raddr, listener := setupNetworkConnection(cli.String("xdebug"), cli.String("ide"), log)
+		laddr, raddr, listener, err := setupNetworkConnection(cli.String("xdebug"), cli.String("ide"))
+		if err != nil {
+			log.Warn(err.Error())
+			os.Exit(1)
+		}
 
 		log.Info("Debugger from %v\nIDE      from %v\n", laddr, raddr)
 
 		pathMapping := &pathmapping.PathMapping{}
 		pathMapper, err := pathmapperfactory.Create(c, pathMapping, log)
-		errorhandler.PanicHandling(err, log)
+		if err != nil {
+			log.Warn(err.Error())
+			os.Exit(1)
+		}
 
 		for {
 			conn, err := listener.AcceptTCP()
@@ -109,18 +117,28 @@ func main() {
 		}
 	}
 
-	app.Run(os.Args)
+	err := app.Run(os.Args)
+	if err != nil {
+		golog.Fatal(err)
+		return
+	}
 }
 
-func setupNetworkConnection(xdebugAddr string, ideAddr string, log *logger.Logger) (*net.TCPAddr, *net.TCPAddr, *net.TCPListener) {
+func setupNetworkConnection(xdebugAddr string, ideAddr string) (*net.TCPAddr, *net.TCPAddr, *net.TCPListener, error) {
 	laddr, err := net.ResolveTCPAddr("tcp", xdebugAddr)
-	errorhandler.PanicHandling(err, log)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	raddr, err := net.ResolveTCPAddr("tcp", ideAddr)
-	errorhandler.PanicHandling(err, log)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	listener, err := net.ListenTCP("tcp", laddr)
-	errorhandler.PanicHandling(err, log)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
-	return laddr, raddr, listener
+	return laddr, raddr, listener, nil
 }

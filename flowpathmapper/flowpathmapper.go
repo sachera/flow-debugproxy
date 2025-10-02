@@ -6,7 +6,6 @@ package flowpathmapper
 
 import (
 	"github.com/dfeyer/flow-debugproxy/config"
-	"github.com/dfeyer/flow-debugproxy/errorhandler"
 	"github.com/dfeyer/flow-debugproxy/logger"
 	"github.com/dfeyer/flow-debugproxy/pathmapperfactory"
 	"github.com/dfeyer/flow-debugproxy/pathmapping"
@@ -16,9 +15,9 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
-	"runtime"
 )
 
 const (
@@ -63,24 +62,26 @@ func (p *PathMapper) Initialize(c *config.Config, l *logger.Logger, m *pathmappi
 }
 
 // ApplyMappingToTextProtocol change file path in xDebug text protocol
-func (p *PathMapper) ApplyMappingToTextProtocol(message []byte) []byte {
-	return p.doTextPathMapping(message)
+func (p *PathMapper) ApplyMappingToTextProtocol(message []byte) ([]byte, error) {
+	return p.doTextPathMapping(message), nil
 }
 
 // ApplyMappingToXML change file path in xDebug XML protocol
-func (p *PathMapper) ApplyMappingToXML(message []byte) []byte {
+func (p *PathMapper) ApplyMappingToXML(message []byte) ([]byte, error) {
 	message = p.doXMLPathMapping(message)
 
 	// update xml length count
 	s := strings.Split(string(message), "\x00")
 	i, err := strconv.Atoi(s[0])
-	errorhandler.PanicHandling(err, p.logger)
+	if err != nil {
+		return nil, err
+	}
 	l := len(s[1])
 	if i != l {
 		message = bytes.Replace(message, []byte(strconv.Itoa(i)), []byte(strconv.Itoa(l)), 1)
 	}
 
-	return message
+	return message, nil
 }
 
 func (p *PathMapper) doTextPathMapping(message []byte) []byte {
@@ -88,7 +89,7 @@ func (p *PathMapper) doTextPathMapping(message []byte) []byte {
 	for _, match := range regexpPhpFile.FindAllStringSubmatch(string(message), -1) {
 		originalPath := match[1]
 		if runtime.GOOS == "windows" {
-			originalPath = strings.Replace(originalPath,"//","", 1)
+			originalPath = strings.Replace(originalPath, "//", "", 1)
 		}
 		path := p.mapPath(originalPath)
 		p.logger.Debug("doTextPathMapping %s >>> %s", path, originalPath)
@@ -183,7 +184,10 @@ func (p *PathMapper) readOriginalPathFromCache(path, basePath string) string {
 	}
 	p.logger.Debug("readOriginalPathFromCache %s", localPath)
 	dat, err := ioutil.ReadFile(localPath)
-	errorhandler.PanicHandling(err, p.logger)
+	if err != nil {
+		p.logger.Warn(err.Error())
+		return localPath
+	}
 	match := regexpPathAndFilename.FindStringSubmatch(string(dat))
 	if len(match) == 2 {
 		originalPath := match[1]

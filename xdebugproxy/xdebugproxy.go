@@ -9,10 +9,10 @@ import (
 	"github.com/dfeyer/flow-debugproxy/logger"
 	"github.com/dfeyer/flow-debugproxy/pathmapping"
 
+	"bytes"
 	"fmt"
 	"io"
 	"net"
-	"bytes"
 	"strconv"
 )
 
@@ -21,8 +21,8 @@ const h = "%s"
 // XDebugProcessorPlugin process message in xDebug protocol
 type XDebugProcessorPlugin interface {
 	Initialize(c *config.Config, l *logger.Logger, m *pathmapping.PathMapping)
-	ApplyMappingToTextProtocol(message []byte) []byte
-	ApplyMappingToXML(message []byte) []byte
+	ApplyMappingToTextProtocol(message []byte) ([]byte, error)
+	ApplyMappingToXML(message []byte) ([]byte, error)
 }
 
 // Proxy represents a pair of connections and their state
@@ -135,18 +135,30 @@ func (p *Proxy) pipe(src, dst *net.TCPConn) {
 		}
 		// extract command name
 		if isFromDebugger {
-			b = p.PathMapper.ApplyMappingToXML(b)
+			b, err = p.PathMapper.ApplyMappingToXML(b)
+			if p.handleError(err, dst) {
+				return
+			}
 			// post processors
 			for _, d := range p.postProcessors {
 				processor = d
-				b = processor.ApplyMappingToXML(b)
+				b, err = processor.ApplyMappingToXML(b)
+				if p.handleError(err, dst) {
+					return
+				}
 			}
 		} else {
-			b = p.PathMapper.ApplyMappingToTextProtocol(b)
+			b, err = p.PathMapper.ApplyMappingToTextProtocol(b)
+			if p.handleError(err, dst) {
+				return
+			}
 			// post processors
 			for _, d := range p.postProcessors {
 				processor = d
-				b = processor.ApplyMappingToTextProtocol(b)
+				b, err = processor.ApplyMappingToTextProtocol(b)
+				if p.handleError(err, dst) {
+					return
+				}
 			}
 		}
 

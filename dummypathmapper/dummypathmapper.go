@@ -33,11 +33,11 @@ func (p *PathMapper) Initialize(c *config.Config, l *logger.Logger, m *pathmappi
 }
 
 // ApplyMappingToTextProtocol change file path in xDebug text protocol
-func (p *PathMapper) ApplyMappingToTextProtocol(message []byte) []byte {
-	return message
+func (p *PathMapper) ApplyMappingToTextProtocol(message []byte) ([]byte, error) {
+	return message, nil
 }
 
 // ApplyMappingToXML change file path in xDebug XML protocol
-func (p *PathMapper) ApplyMappingToXML(message []byte) []byte {
-	return message
+func (p *PathMapper) ApplyMappingToXML(message []byte) ([]byte, error) {
+	return message, nil
 }
