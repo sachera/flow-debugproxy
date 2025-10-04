@@ -91,7 +91,16 @@ func main() {
 			os.Exit(1)
 		}
 
-		log.Info("Debugger from %v\nIDE      from %v\n", laddr, raddr)
+		log.Info("Debugger from %v", laddr)
+		log.Info("IDE      from %v", raddr)
+		if c.Verbose {
+			log.Info("Context       %v", c.Context)
+			log.Info("Framework     %v", c.Framework)
+			log.Info("Local Root    %v", c.LocalRoot)
+			log.Info("Verbose       %v", c.Verbose)
+			log.Info("Very Verbose  %v", c.VeryVerbose)
+			log.Info("Debug         %v", c.Debug)
+		}
 
 		pathMapping := &pathmapping.PathMapping{}
 		pathMapper, err := pathmapperfactory.Create(c, pathMapping, log)

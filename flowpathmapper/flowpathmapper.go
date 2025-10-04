@@ -159,6 +159,8 @@ func (p *PathMapper) mapPath(originalPath string) string {
 		}
 		if err == nil {
 			return p.setPathMapping(realPath, originalPath)
+		} else if p.config.Debug {
+			p.logger.Debug("Path %s not found on disk, return original path", realPath)
 		}
 	}
 
