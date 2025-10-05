@@ -5,6 +5,7 @@
 package main
 
 import (
+	"fmt"
 	golog "log"
 
 	"github.com/dfeyer/flow-debugproxy/config"
@@ -34,18 +35,13 @@ func main() {
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
 			Name:  "xdebug, l",
-			Value: "127.0.0.1:9000",
+			Value: "Development:9003",
 			Usage: "Listen address IP and port number",
 		},
 		&cli.StringFlag{
 			Name:  "ide, I",
 			Value: "127.0.0.1:9010",
 			Usage: "Bind address IP and port number",
-		},
-		&cli.StringFlag{
-			Name:  "context, c",
-			Value: "Development",
-			Usage: "The context to run as",
 		},
 		&cli.StringFlag{
 			Name:  "localroot, r",
@@ -73,7 +69,7 @@ func main() {
 
 	app.Action = func(cli *cli.Context) error {
 		c := &config.Config{
-			Context:     cli.String("context"),
+			Context:     "",
 			Framework:   cli.String("framework"),
 			LocalRoot:   strings.TrimRight(cli.String("localroot"), "/"),
 			Verbose:     cli.Bool("verbose") || cli.Bool("vv"),
@@ -85,16 +81,17 @@ func main() {
 			Config: c,
 		}
 
-		laddr, raddr, listener, err := setupNetworkConnection(cli.String("xdebug"), cli.String("ide"))
+		listener, raddr, err := setupNetworkConnection(strings.Split(cli.String("xdebug"), ","), cli.String("ide"))
 		if err != nil {
 			log.Warn(err.Error())
 			os.Exit(1)
 		}
 
-		log.Info("Debugger from %v", laddr)
+		for _, listenerWithContext := range listener {
+			log.Info("Debugger from %v for context %v", listenerWithContext.addr, listenerWithContext.context)
+		}
 		log.Info("IDE      from %v", raddr)
 		if c.Verbose {
-			log.Info("Context       %v", c.Context)
 			log.Info("Framework     %v", c.Framework)
 			log.Info("Local Root    %v", c.LocalRoot)
 			log.Info("Verbose       %v", c.Verbose)
@@ -102,26 +99,40 @@ func main() {
 			log.Info("Debug         %v", c.Debug)
 		}
 
-		pathMapping := &pathmapping.PathMapping{}
-		pathMapper, err := pathmapperfactory.Create(c, pathMapping, log)
-		if err != nil {
-			log.Warn(err.Error())
-			os.Exit(1)
+		connections := make(chan *xdebugproxy.Proxy)
+		for _, listenerWithContext := range listener {
+			listenerWithContext := listenerWithContext
+			originalConfig := *c
+			proxyConfig := originalConfig // copy config
+			proxyConfig.Context = listenerWithContext.context
+
+			pathMapping := &pathmapping.PathMapping{}
+			pathMapper, err := pathmapperfactory.Create(&proxyConfig, pathMapping, log)
+			if err != nil {
+				log.Warn(err.Error())
+				os.Exit(1)
+			}
+
+			go func() {
+				for {
+					conn, err := listenerWithContext.listener.AcceptTCP()
+					if err != nil {
+						log.Warn("Failed to accept connection '%s'\n", err)
+						continue
+					}
+
+					connections <- &xdebugproxy.Proxy{
+						Lconn:      conn,
+						Raddr:      raddr,
+						PathMapper: pathMapper,
+						Config:     &proxyConfig,
+					}
+				}
+			}()
 		}
 
 		for {
-			conn, err := listener.AcceptTCP()
-			if err != nil {
-				log.Warn("Failed to accept connection '%s'\n", err)
-				continue
-			}
-
-			proxy := &xdebugproxy.Proxy{
-				Lconn:      conn,
-				Raddr:      raddr,
-				PathMapper: pathMapper,
-				Config:     c,
-			}
+			proxy := <-connections
 			go proxy.Start()
 		}
 	}
@@ -133,21 +144,49 @@ func main() {
 	}
 }
 
-func setupNetworkConnection(xdebugAddr string, ideAddr string) (*net.TCPAddr, *net.TCPAddr, *net.TCPListener, error) {
-	laddr, err := net.ResolveTCPAddr("tcp", xdebugAddr)
-	if err != nil {
-		return nil, nil, nil, err
+type listenerWithContext struct {
+	addr     *net.TCPAddr
+	listener *net.TCPListener
+	context  string
+}
+
+func splitContextAndPort(contextWithPort string) (string, string, error) {
+	contextAndPort := strings.Split(contextWithPort, ":")
+	if len(contextAndPort) != 2 {
+		return "", "", fmt.Errorf("could not parse port and context information '%s'", contextWithPort)
+	}
+	return contextAndPort[0], contextAndPort[1], nil
+}
+
+func setupNetworkConnection(xdebugAddr []string, ideAddr string) ([]*listenerWithContext, *net.TCPAddr, error) {
+	listener := make([]*listenerWithContext, 0, len(xdebugAddr))
+	for _, portWithContext := range xdebugAddr {
+		context, portStr, err := splitContextAndPort(portWithContext)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		addr, err := net.ResolveTCPAddr("tcp", "0.0.0.0:"+portStr)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		l, err := net.ListenTCP("tcp", addr)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		listener = append(listener, &listenerWithContext{
+			addr:     addr,
+			listener: l,
+			context:  context,
+		})
 	}
 
 	raddr, err := net.ResolveTCPAddr("tcp", ideAddr)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
-	listener, err := net.ListenTCP("tcp", laddr)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	return laddr, raddr, listener, nil
+	return listener, raddr, nil
 }

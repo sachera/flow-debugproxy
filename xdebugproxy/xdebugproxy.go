@@ -60,7 +60,7 @@ func (p *Proxy) Start() {
 	defer close(p.pipeErrors)
 
 	// display both ends
-	p.log("Opened %s >>> %s", p.Lconn.RemoteAddr().String(), p.rconn.RemoteAddr().String())
+	p.log("Opened %s >>> %s -- context %s", p.Lconn.RemoteAddr().String(), p.rconn.RemoteAddr().String(), p.Config.Context)
 	// bidirectional copy
 	go p.pipe(p.Lconn, p.rconn)
 	go p.pipe(p.rconn, p.Lconn)

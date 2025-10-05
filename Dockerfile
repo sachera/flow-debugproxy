@@ -22,11 +22,13 @@ COPY --from=build-env /app/flow-debugproxy /app/
 
 ENV ADDITIONAL_ARGS ""
 
-ENV XDEBUG_PORT 9010
+ENV XDEBUG 9003:Development
 
-ENV IDE_IP 127.0.0.1
-ENV IDE_PORT 9000
+ENV IDE_IP host.docker.internal
+ENV IDE_PORT 9010
 
 ENV FRAMEWORK "flow"
 
-ENTRYPOINT ["sh", "-c", "./flow-debugproxy --xdebug 0.0.0.0:${XDEBUG_PORT} --framework ${FRAMEWORK} --ide ${IDE_IP}:${IDE_PORT} ${ADDITIONAL_ARGS}"]
+ENV LOCAL_ROOT ""
+
+ENTRYPOINT ["sh", "-c", "./flow-debugproxy --xdebug ${XDEBUG} --framework ${FRAMEWORK} --ide ${IDE_IP}:${IDE_PORT} --localroot \"${LOCAL_ROOT}\" ${ADDITIONAL_ARGS}"]
