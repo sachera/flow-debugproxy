@@ -27,12 +27,13 @@ const (
 )
 
 var (
-	regexpPhpFile         = regexp.MustCompile(`(?://)?(/[^ ]*\.php)`)
-	regexpFilename__Win   = regexp.MustCompile(`filename=["]?file:///(\S+)/Data/Temporary/.+?/Cache/Code/Flow_Object_Classes/([^"]*)\.php`)
-	regexpFilename__Unix  = regexp.MustCompile(`filename=["]?file://(\S+)/Data/Temporary/.+?/Cache/Code/Flow_Object_Classes/([^"]*)\.php`)
-	regexpPathAndFilename = regexp.MustCompile(`(?m)^# PathAndFilename: (.*)$`)
-	regexpPackageClass    = regexp.MustCompile(`(.*?)/Packages/[^/]*/(.*?)/Classes/(.*).php`)
-	regexpDot             = regexp.MustCompile(`[\./]`)
+	regexpPhpFile                  = regexp.MustCompile(`(?://)?(/[^ ]*\.php)`)
+	regexpFilename__Win            = regexp.MustCompile(`filename=["]?file:///(\S+)/Data/Temporary/.+?/Cache/Code/Flow_Object_Classes/([^"]*)\.php`)
+	regexpFilename__Unix           = regexp.MustCompile(`filename=["]?file://(\S+)/Data/Temporary/.+?/Cache/Code/Flow_Object_Classes/([^"]*)\.php`)
+	regexpPathAndFilename          = regexp.MustCompile(`(?m)^# PathAndFilename: (.*)$`)
+	regexpPackageClass             = regexp.MustCompile(`(.*?)/Packages/[^/]*/(.*?)/Classes/(.*).php`)
+	regexpDistributionPackageClass = regexp.MustCompile(`(.*?)/DistributionPackages/(.*?)/Classes/(.*).php`)
+	regexpDot                      = regexp.MustCompile(`[\./]`)
 )
 
 func init() {
@@ -149,11 +150,16 @@ func (p *PathMapper) getRealFilename(path string) string {
 }
 
 func (p *PathMapper) mapPath(originalPath string) string {
-	if strings.Contains(originalPath, "/Packages/") {
+	if strings.Contains(originalPath, "/Packages/") ||
+		strings.Contains(originalPath, "/DistributionPackages/") {
 		p.logger.Debug("Path %s is a Flow Package file", originalPath)
-		cachePath := p.getCachePath(p.buildClassNameFromPath(originalPath))
+		basePath, className, err := pathToClassPath(originalPath)
+		if err != nil {
+			p.logger.Warn(err.Error())
+			return originalPath
+		}
+		cachePath := p.getCachePath(basePath, className)
 		realPath := p.getRealFilename(cachePath)
-		var err error
 		if len(p.config.LocalRoot) == 0 {
 			_, err = os.Stat(realPath)
 		}
@@ -206,23 +212,16 @@ func (p *PathMapper) readOriginalPathFromCache(path, basePath string) string {
 	return path
 }
 
-func (p *PathMapper) buildClassNameFromPath(path string) (string, string) {
-	basePath, className := pathToClassPath(path)
-	if className == "" {
-		// Other (vendor) packages, todo add support for vendor package with Flow proxy class
-		p.logger.Warn(h, "Vendor package detected")
-		p.logger.Warn("Class mapping not supported currently for path: %s, \n", path)
-	}
-	return basePath, className
-}
-
 // Convert absolute path to class path (internal use only)
-func pathToClassPath(path string) (string, string) {
+func pathToClassPath(path string) (string, string, error) {
 	var (
 		basePath  string
 		classPath string
 	)
 	match := regexpPackageClass.FindStringSubmatch(path)
+	if len(match) != 4 {
+		match = regexpDistributionPackageClass.FindStringSubmatch(path)
+	}
 	if len(match) == 4 {
 		// Flow standard packages
 		packagePath := regexpDot.ReplaceAllString(match[2], "/")
@@ -234,9 +233,7 @@ func pathToClassPath(path string) (string, string) {
 		basePath = match[1]
 		classPath = regexpDot.ReplaceAllString(classPath, "_")
 	} else {
-		// Other (vendor) packages, todo add support for vendor package with Flow proxy class
-		basePath = path
-		classPath = ""
+		return "", "", fmt.Errorf("path %s does not match known class path patterns, may be an (unsupported) vendor package", path)
 	}
-	return basePath, classPath
+	return basePath, classPath, nil
 }
