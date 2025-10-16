@@ -16,6 +16,8 @@ between your PHP file and the proxy class.
 Build your own
 --------------
 
+When you just want to use this inside Docker you probably want to scroll further down and skip until you reach the **Use with Docker** part. No need to build it on your host machine yourself.
+
     # Get the dependecies
     go get
     # Build
@@ -43,57 +45,62 @@ Show help
 Use with Docker
 ---------------
 
-Use the [official docker image](https://hub.docker.com/r/dfeyer/flow-debugproxy/) and follow the instruction for the configuration.
-
-##### PHP configuration
+Make sure xdebug is installed in your dev container. You can use drydock for this or add the following to your development Dockerfile
 
 ```
-[Xdebug]
-zend_extension=/.../xdebug.so
-xdebug.remote_enable=1
-xdebug.idekey=PHPSTORM
-; The IP or name of the proxy container
-xdebug.remote_host=debugproxy
-; The proxy port (9010 by default, to not have issue is you use PHP FPM, already on port 9000)
-xdebug.remote_port=9010
-;xdebug.remote_log=/tmp/xdebug.log
+# install xdebug
+RUN yes | pecl install xdebug
+RUN echo "zend_extension=$(find /usr/local/lib/php/extensions/ -name xdebug.so)" > /usr/local/etc/php/conf.d/xdebug.ini
 ```
+#### Docker Compose
 
-You can use the `xdebug.remote_log` to debug the protocol between your container and the proxy, it's useful to catch network issues.
-
-##### Docker Compose
-
-This is an incomplete Docker Compose configuration:
+This is an incomplete Docker Compose configuration showing all relevant settings for the debugproxy:
 
 ```
 services:
   debugproxy:
-    image: dfeyer/flow-debugproxy:latest
+    image: ghcr.io/sachera/flow-debugproxy:latest
     volumes:
-      - .:/data
+      - neos_data_tempory:/neos/Data/Temporary:ro
     environment:
       # This MUST be the IP address of the IDE (your computer)
-      - "IDE_IP=192.168.1.130"
-      # This is the default value, need to match the xdebug.remote_port on your php.ini
-      - "XDEBUG_PORT=9010"
+      IDE_PORT: 9003
+      # This is the default value, need to match the xdebug.client_port and FLOW_CONTEXT environment variable
+      XDEBUG: Docker/Testing:9001,Docker/Development:9002
+      # must match the path used in the volume
+      LOCAL_ROOT: /neos
       # Use this to enable verbose debugging on the proxy
-      # - "ADDITIONAL_ARGS=-vv --debug"
+      #ADDITIONAL_ARGS: "-vv --debug"
     networks:
       - backend
 
   # This is your application containers, you need to link it to the proxy
   app:
     # The proxy need an access to the project files, to be able to do the path mapping
+    # make sure the path is the one actually used by neos and exists in the container
+    # if it is created by this command neos won't be able to write any temporary cache data due to right issues!
     volumes:
-      - .:/data
-    links:
-      - debugproxy
+      neos_data_tempory:/app/Data/Temporary:rw,cached
+      
+volumes:
+  neos_data_temporary: {}
 ```
 
+When running the debugger make sure to include interpreter options for xdebug to tell it about your debug proxy. For example using the above compose file when debugging a test in the Docker/Testing context you would use:
+
+```
+-dxdebug.client_host=debugproxy -dxdebug.client_port=9001
+```
+
+**Depending on your IDE set this setting as late as possible!**
+
+IntelliJ/PHPStorm for example set these command line options on their own, overriding them if you set them in your xdebug.ini. You will need to add them to the configuration of each actual test to make sure these settings have precedence!
+
 **Options summary:**
-* `IDE_IP` The primary local W-/LAN IP of your machine where your IDE runs on
+* `IDE_IP` The primary local W-/LAN IP of your machine where your IDE runs on, defaults to docker.host.internal
 * `IDE_PORT` The Port your IDE is listening for incoming xdebug connections. (The port the debug proxy will try to connect to)
-* `XDEBUG_PORT` The port on which xdebug will try to establish a connection (to this container)
+* `XDEBUG` The flow context to port mapping. Based on the port xdebug connects to the context will be determined by this container
+* `LOCAL_ROOT` The path where the Data/Temporary directory will be mounted to. Used to determine the path mapping
 * `FRAMEWORK` Currently supported values: `flow` and `dummy`
 * `ADDITIONAL_ARGS` For any additional argument like verbosity flags (`-vv`) or debug mode (`--debug`) (or both)
 
