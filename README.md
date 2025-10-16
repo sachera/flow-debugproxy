@@ -51,6 +51,9 @@ Make sure xdebug is installed in your dev container. You can use drydock for thi
 # install xdebug
 RUN yes | pecl install xdebug
 RUN echo "zend_extension=$(find /usr/local/lib/php/extensions/ -name xdebug.so)" > /usr/local/etc/php/conf.d/xdebug.ini
+
+# ensure /app/Data/Temporary exists (change this if neos is not in /app)
+RUN mkdir -p /app/Data/Temporary
 ```
 #### Docker Compose
 
