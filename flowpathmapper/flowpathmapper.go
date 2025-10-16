@@ -9,6 +9,7 @@ import (
 	"github.com/dfeyer/flow-debugproxy/logger"
 	"github.com/dfeyer/flow-debugproxy/pathmapperfactory"
 	"github.com/dfeyer/flow-debugproxy/pathmapping"
+	"github.com/dfeyer/flow-debugproxy/xdebugproxy"
 
 	"bytes"
 	"fmt"
@@ -37,7 +38,7 @@ var (
 )
 
 func init() {
-	p := &PathMapper{}
+	p := &PathMapperFactory{}
 	pathmapperfactory.Register(framework, p)
 }
 
@@ -48,18 +49,21 @@ func regexpFilename() *regexp.Regexp {
 	return regexpFilename__Unix
 }
 
+type PathMapperFactory struct{}
+
+func (p *PathMapperFactory) Create(c *config.Config, l *logger.Logger, m *pathmapping.PathMapping) xdebugproxy.XDebugProcessorPlugin {
+	return &PathMapper{
+		config:      c,
+		logger:      l,
+		pathMapping: m,
+	}
+}
+
 // PathMapper handle the mapping between real code and proxy
 type PathMapper struct {
 	config      *config.Config
 	logger      *logger.Logger
 	pathMapping *pathmapping.PathMapping
-}
-
-// Initialize the path mapper dependencies
-func (p *PathMapper) Initialize(c *config.Config, l *logger.Logger, m *pathmapping.PathMapping) {
-	p.config = c
-	p.logger = l
-	p.pathMapping = m
 }
 
 // ApplyMappingToTextProtocol change file path in xDebug text protocol
@@ -109,7 +113,9 @@ func (p *PathMapper) getCachePath(base, filename string) string {
 	context := p.config.Context
 	if strings.Contains(context, "/") {
 		contextParts := strings.Split(context, "/")
-		contextParts[1] = "SubContext" + contextParts[1]
+		for i := 1; i < len(contextParts); i++ {
+			contextParts[i] = "SubContext" + contextParts[i]
+		}
 		context = strings.Join(contextParts, "/")
 	}
 	cachePath = strings.Replace(cachePath, "@context@", context, 1)

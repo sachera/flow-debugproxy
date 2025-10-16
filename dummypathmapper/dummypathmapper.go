@@ -9,13 +9,24 @@ import (
 	"github.com/dfeyer/flow-debugproxy/logger"
 	"github.com/dfeyer/flow-debugproxy/pathmapperfactory"
 	"github.com/dfeyer/flow-debugproxy/pathmapping"
+	"github.com/dfeyer/flow-debugproxy/xdebugproxy"
 )
 
 const framework = "dummy"
 
 func init() {
-	p := &PathMapper{}
+	p := &PathMapperFactory{}
 	pathmapperfactory.Register(framework, p)
+}
+
+type PathMapperFactory struct{}
+
+func (p *PathMapperFactory) Create(c *config.Config, l *logger.Logger, m *pathmapping.PathMapping) xdebugproxy.XDebugProcessorPlugin {
+	return &PathMapper{
+		config:      c,
+		logger:      l,
+		pathMapping: m,
+	}
 }
 
 // PathMapper handle the mapping between real code and proxy
@@ -23,13 +34,6 @@ type PathMapper struct {
 	config      *config.Config
 	logger      *logger.Logger
 	pathMapping *pathmapping.PathMapping
-}
-
-// Initialize the path mapper dependencies
-func (p *PathMapper) Initialize(c *config.Config, l *logger.Logger, m *pathmapping.PathMapping) {
-	p.config = c
-	p.logger = l
-	p.pathMapping = m
 }
 
 // ApplyMappingToTextProtocol change file path in xDebug text protocol

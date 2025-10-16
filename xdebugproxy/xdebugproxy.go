@@ -18,9 +18,12 @@ import (
 
 const h = "%s"
 
+type XDebugProcessorPluginFactory interface {
+	Create(c *config.Config, l *logger.Logger, m *pathmapping.PathMapping) XDebugProcessorPlugin
+}
+
 // XDebugProcessorPlugin process message in xDebug protocol
 type XDebugProcessorPlugin interface {
-	Initialize(c *config.Config, l *logger.Logger, m *pathmapping.PathMapping)
 	ApplyMappingToTextProtocol(message []byte) ([]byte, error)
 	ApplyMappingToXML(message []byte) ([]byte, error)
 }
