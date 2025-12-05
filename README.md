@@ -64,7 +64,7 @@ services:
   debugproxy:
     image: ghcr.io/sachera/flow-debugproxy:latest
     volumes:
-      - neos_data_tempory:/neos/Data/Temporary:ro
+      - neos_data_temporary:/neos/Data/Temporary:ro
     environment:
       # This MUST be the IP address of the IDE (your computer)
       IDE_PORT: 9003
@@ -83,7 +83,7 @@ services:
     # make sure the path is the one actually used by neos and exists in the container
     # if it is created by this command neos won't be able to write any temporary cache data due to right issues!
     volumes:
-      neos_data_tempory:/app/Data/Temporary:rw,cached
+      neos_data_temporary:/app/Data/Temporary:rw,cached
       
 volumes:
   neos_data_temporary: {}
